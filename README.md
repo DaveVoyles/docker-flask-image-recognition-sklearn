@@ -22,8 +22,7 @@ docker run -d --name flask-sklearn-classification -p 5000:5000 davevoyles/flask-
 
 
 ### Verify everything works locally, then remove the image
-``
-docker ps
+``docker ps
 docker logs flask-sklearn-classification
 docker rm -f docker logs flask-sklearn-classification```
 
