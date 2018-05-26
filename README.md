@@ -18,6 +18,21 @@ Flask is great for developers working on small projects that need a quick way to
 **Scikit-Learn**
 Scikit-Learn is a simple and efficient tools for data mining and data analysis, which is built on NumPy, SciPy, and matplotlib. It does a lot of the dirty work involved with machine learning, and allows you to quickly build models, make predicitons, and manage your data.
 
+Once your docker container is deployed, you simply make an HTTP Post request to ```<YourWebsite>:5000/classify``` with the URL of an image in the body, and the model will return a label for what it think best describes is in the image. At the moment it is trained to detect:
+-    axes
+-    boots
+-    carabiners
+-    crampons
+-    gloves
+-    hardshell jackets
+-    harnesses
+-    helmets
+-    insulated jackets
+-    pulleys
+-    rope
+-    tents
+
+You could easily train it to classify other objects, too. All of the code for this project is contained in the app.py file, and the trained model is contained in the pickle_model.pkl file.
 
 ### Buld the image & run it locally
 In a terminal, navigate to the folder containing the .dockerfile.
