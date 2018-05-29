@@ -35,7 +35,22 @@ Once your docker container is deployed, you simply make an HTTP Post request to 
 -    rope
 -    tents
 
+### Is this re-usable? Can I use my own trained model?
+Yes!
+
 You could easily train it to classify other objects, too. All of the code for this project is contained in the app.py file, and the trained model is contained in the pickle_model.pkl file.
+
+Simply replace the *pickle_model.pkl* file with a trained model of your own.
+
+*App.py* contains the code which does several things:
+
+- Resizes the image 
+- Normalizes the image
+- Parses the JSON POST request you made to its endpoint
+- Calls the trained model
+- Returns the classification result
+
+The trained model, contained in *pickle_model.pkl* expects all images to be resized (128x128) and normalized, so if you're creating a new model of your own, you may want to keep this bit of code. 
 
 ### Buld the image & run it locally
 In a terminal, navigate to the folder containing the .dockerfile.
