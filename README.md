@@ -6,7 +6,7 @@
 
 Create a docker container and host it in Azure with this tutorial
 ----------
-## Why would you want to use this?
+### Why would you want to use this?
 Imagine that you have built a machine learning model and want others to be able to use it. You'd have to host it somewhere, and as more users hit the endpoint with the model, you'll need to scale dynamically to assure they have a fast and consistent experience. This project includes a number of simple, yet helpful tools.
 
 **Docker**
