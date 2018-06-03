@@ -197,5 +197,5 @@ curl -X POST \
 ### Delete the container
 
 ```
-az container delete --name ohmyservice2 --resource-group t9modelmgmt
+az container delete --name dv-flask-container --resource-group dv-containers-rgt
 ```
