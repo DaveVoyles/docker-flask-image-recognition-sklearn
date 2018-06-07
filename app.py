@@ -8,6 +8,7 @@ import pickle
 import numpy as np
 import requests
 
+# These are the possible categories (classes) which can be detected
 namemap = [
     'axes',
     'boots',
@@ -24,18 +25,21 @@ namemap = [
 ]
 app = Flask(__name__)
 
+
 def resize(image):
+    """ Resize any image to 128 x 128, which is what the model has been trained on """
+    
     base = 128
     width, height = image.size
 
     if width > height:
         wpercent = base/float(width)
-        hsize = int((float(height) * float(wpercent)))
-        image = image.resize((base,hsize), Image.ANTIALIAS)
+        hsize    = int((float(height) * float(wpercent)))
+        image    = image.resize((base,hsize), Image.ANTIALIAS)
     else:
         hpercent = base/float(height)
-        wsize = int((float(width) * float(hpercent)))
-        image = image.resize((wsize, base), Image.ANTIALIAS)
+        wsize    = int((float(width) * float(hpercent)))
+        image    = image.resize((wsize, base), Image.ANTIALIAS)
 
     newImage = Image.new('RGB',
                      (base, base),     # A4 at 72dpi
@@ -46,11 +50,12 @@ def resize(image):
 
     return newImage
 
+
 def normalize(arr):
-    """
-    Linear normalization
-    http://en.wikipedia.org/wiki/Normalization_%28image_processing%29
-    """
+    """ This means that the largest value for each attribute is 1 and the smallest value is 0.
+        Normalization is a good technique to use when you do not know the distribution of your data 
+        or when you know the distribution is not Gaussian (a bell curve)."""
+    
     arr = arr.astype('float')
     
     # Do not touch the alpha channel
@@ -63,10 +68,9 @@ def normalize(arr):
 
     return arr
 
+
 def processImage(image):
-    """
-    Resize and normalize the image
-    """
+    """ Resize and normalize the image """
 
     image   = resize(image)
     arr     = np.array(image)
@@ -77,9 +81,9 @@ def processImage(image):
 
 @app.route('/classify', methods=['POST'])
 def classify():
-    """
-    Make a POST to this endpint and pass in an URL to an image in the body of the request
-    """
+    """ Make a POST to this endpint and pass in an URL to an image in the body of the request.
+        Swap out the model.pkl with another trained model to classify new objects. """
+    
     try:
         body    = request.get_json()
         print(body)
@@ -90,6 +94,7 @@ def classify():
         img      = Image.open(BytesIO(response.content))
         prcedImg = processImage(img)
 
+        # Convert a 2D image into a flat array
         imgFeatures = np.array(prcedImg).ravel().reshape(1,-1)
         print(imgFeatures)
 
@@ -99,8 +104,9 @@ def classify():
         
         print('image: ', namemap[int(predict[0])], predict)
 
+        # Convert the integer returned from the model into the name of the class from our namemap above.
+        # EX: 0 = axes, 1 = boots, 2 = carabiners
         response = json.dumps({"classification": namemap[int(predict[0])]})
-
         return(response)
         
     except Exception as e:
@@ -109,7 +115,3 @@ def classify():
 
 if __name__ == '__main__':
     app.run(debug=True,host='0.0.0.0')
-
-
-
-
