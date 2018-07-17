@@ -57,12 +57,12 @@ In a terminal, navigate to the folder containing the .dockerfile.
 This will create a new docker image and tag it with the name of your repository, name of the image, and the version
 It will take a few minutes to download & install all of the required files
 ```
-docker build -t davevoyles/flask-sklearn-classification:latest . 
+docker build -t davevoyles/docker-flask-image-recognition-sklearn:latest . 
 ```
 
 Run the image locally in debug mode and expose ports 5000
 ```
-docker run -d --name flask-sklearn-classification -p 5000:5000 davevoyles/flask-sklearn-classification
+docker run -d --name docker-flask-image-recognition-sklearn -p 5000:5000 davevoyles/docker-flask-image-recognition-sklearn
 ```
 
 
@@ -70,15 +70,15 @@ docker run -d --name flask-sklearn-classification -p 5000:5000 davevoyles/flask-
 ``` docker ps ```
 
 
-``` docker logs flask-sklearn-classification ```
+``` docker logs docker-flask-image-recognition-sklearn ```
 
 
-``` docker rm -f docker logs flask-sklearn-classification ```
+``` docker rm -f docker logs docker-flask-image-recognition-sklearnn ```
 
 
 Push to docker hub account name/repository. This may take a few minutes
 ```
-docker push davevoyles/flask-sklearn-classification
+docker push davevoyles/docker-flask-image-recognition-sklearn
 ```
 
 ### Login to Azure via CLI
@@ -95,7 +95,7 @@ az group create -l eastus -n dv-containers-rg
 Create a container in azure w/ a public IP so that we can make HTTP post requests and expose port 5000.
 Pull image from dockerhub *account/repository/tag*
 ```
-az container create --resource-group dv-containers-rg --name dv-flask-container --image davevoyles/flask-sklearn-classification:latest --ip-address public --location eastus --ports 5000
+az container create --resource-group dv-containers-rg --name dv-flask-container --image davevoyles/docker-flask-image-recognition-sklearn:latest --ip-address public --location eastus --ports 5000
 ```
 
 Check status of container by querying the ip address. You may have to wait a few minutes for it to complete.
