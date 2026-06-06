@@ -52,7 +52,7 @@ def resize(image):
         image = image.resize((wsize, base), resample)
 
     canvas = Image.new('RGB', (base, base), (255, 255, 255))
-    position = (int(base / 2 - image.width / 2), 0)
+    position = (int(base / 2 - image.width / 2), int(base / 2 - image.height / 2))
     canvas.paste(image, position)
     return canvas
 
