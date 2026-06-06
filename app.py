@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import urlparse
 
 import joblib
 import numpy as np
@@ -104,6 +105,15 @@ def classify():
         return jsonify({"error": "Request body must be JSON with a 'url' field."}), 400
 
     img_url = body['url']
+
+    # Reject non-HTTP/S schemes to prevent SSRF (e.g. file://, gopher://)
+    try:
+        parsed = urlparse(img_url)
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            return jsonify({"error": "URL must use http or https."}), 400
+    except Exception:
+        return jsonify({"error": "Invalid URL."}), 400
+
     logger.info("Classifying image: %s", img_url)
 
     try:
@@ -112,10 +122,10 @@ def classify():
         img = Image.open(BytesIO(response.content)).convert('RGB')
     except requests.RequestException as exc:
         logger.warning("Failed to fetch image %s: %s", img_url, exc)
-        return jsonify({"error": f"Could not retrieve image: {exc}"}), 422
+        return jsonify({"error": "Could not retrieve image."}), 422
     except Exception as exc:
         logger.warning("Could not open image from %s: %s", img_url, exc)
-        return jsonify({"error": f"Could not open image: {exc}"}), 422
+        return jsonify({"error": "Could not open image."}), 422
 
     processed_img = process_image(img)
 
