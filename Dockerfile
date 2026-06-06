@@ -1,7 +1,25 @@
-FROM python:3
-RUN apt-get update -y
-RUN apt-get install -y python-pip python-dev build-essential && pip install --upgrade pip && pip install numpy && pip install flask && pip install scipy && pip install scikit-learn && pip install matplotlib && pip install requests && pip install pillow
-COPY . /app
+FROM python:3.11-slim
+
+# Install OS-level build dependencies in a single layer, then clean up
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-ENTRYPOINT ["python"]
-CMD ["app.py"]
+
+# Install Python dependencies before copying application code so that Docker
+# can cache this layer and avoid re-installing packages on every code change.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application
+COPY . .
+
+# Run as a non-root user for improved security
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
+
+EXPOSE 5000
+
+# Use gunicorn for a production-grade WSGI server
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "app:app"]
