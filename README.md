@@ -1,201 +1,228 @@
 
-# Docker container running a flask web server for image classification using Scikit-Learn
+# Docker + Flask Image Classification with scikit-learn
 
-#### Author(s): The team at TD Bank | Dave Voyles, MSFT | [@DaveVoyles](http://www.twitter.com/DaveVoyles)
-#### URL: [www.DaveVoyles.com](http://www.davevoyles.com)
+#### Author: Dave Voyles | [@DaveVoyles](https://twitter.com/DaveVoyles)
 
-Create a docker container and host it in Azure with this tutorial
-----------
-### Why would you want to use this?
-Imagine that you have built a machine learning model and want others to be able to use it. You'd have to host it somewhere, and as more users hit the endpoint with the model, you'll need to scale dynamically to assure they have a fast and consistent experience. This project includes a number of simple, yet helpful tools.
+A containerised REST API that classifies outdoor-gear images using a pre-trained
+scikit-learn model, served via Flask and Gunicorn inside Docker.
 
-**Docker**
+---
 
-Docker is a platform that allows users to easily pack, distribute, and manage applications within containers. It's an open-source project that automates the deployment of applications inside software containers. Gone are the days of an IT professional saying  "*Well, it worked on my machine.*" Not it works on all of our machines.
+## Why would you want this?
 
-**Flask**
+Imagine you've built a machine-learning model and want others to call it over HTTP.
+Packaging it inside Docker means:
 
-Flask is great for developers working on small projects that need a quick way to make a simple, Python-powered web site. It powers loads of small one-off tools, or simple web interfaces built over existing APIs.
+- **Portability** – "works on my machine" becomes "works everywhere."
+- **Scalability** – run multiple replicas behind a load-balancer with no code changes.
+- **Reproducibility** – the exact Python version and dependencies are frozen in the image.
 
-**Scikit-Learn**
+### Tech stack
 
-Scikit-Learn is a simple and efficient tools for data mining and data analysis, which is built on NumPy, SciPy, and matplotlib. It does a lot of the dirty work involved with machine learning, and allows you to quickly build models, make predicitons, and manage your data.
+| Tool | Purpose |
+|---|---|
+| **Docker** | Containerises the entire application |
+| **Flask** | Lightweight Python web framework |
+| **Gunicorn** | Production-grade WSGI server |
+| **scikit-learn** | Loads and runs the pre-trained model |
+| **Pillow / NumPy** | Image pre-processing |
 
-Once your docker container is deployed, you simply make an HTTP Post request to ```<YourWebsite>:5000/classify``` with the URL of an image in the body, and the model will return a label for what it think best describes is in the image. At the moment it is trained to detect:
--    axes
--    boots
--    carabiners
--    crampons
--    gloves
--    hardshell jackets
--    harnesses
--    helmets
--    insulated jackets
--    pulleys
--    rope
--    tents
+---
 
-### Is this re-usable? Can I use my own trained model?
-Yes!
+## What can it classify?
 
-You could easily train it to classify other objects, too. All of the code for this project is contained in the app.py file, and the trained model is contained in the pickle_model.pkl file.
+POST any publicly reachable image URL and the API returns its predicted category:
 
-Simply replace the *pickle_model.pkl* file with a trained model of your own.
+- axes
+- boots
+- carabiners
+- crampons
+- gloves
+- hardshell jackets
+- harnesses
+- helmets
+- insulated jackets
+- pulleys
+- rope
+- tents
 
-*App.py* contains the code which does several things:
+---
 
-- Resizes the image 
-- Normalizes the image
-- Parses the JSON POST request you made to its endpoint
-- Calls the trained model
-- Returns the classification result
+## Using your own model
 
-The trained model, contained in *pickle_model.pkl* expects all images to be resized (128x128) and normalized, so if you're creating a new model of your own, you may want to keep this bit of code. 
+1. Train a scikit-learn classifier that expects a flat **128 × 128 × 3 = 49 152**-feature vector.
+2. Serialize it with `joblib.dump(model, 'pickle_model.pkl')`.
+3. Drop your `pickle_model.pkl` into this directory and rebuild the image.
 
-### Buld the image & run it locally
-In a terminal, navigate to the folder containing the .dockerfile.
-This will create a new docker image and tag it with the name of your repository, name of the image, and the version
-It will take a few minutes to download & install all of the required files
-```
-docker build -t davevoyles/docker-flask-image-recognition-sklearn:latest . 
-```
+The `process_image()` helper in `app.py` handles resizing and per-channel min-max
+normalisation automatically, so new images will be prepared consistently.
 
-Run the image locally in debug mode and expose ports 5000
-```
-docker run -d --name docker-flask-image-recognition-sklearn -p 5000:5000 davevoyles/docker-flask-image-recognition-sklearn
-```
+---
 
+## Build and run locally
 
-### Verify everything works locally, then remove the image
-``` docker ps ```
+**Build the image**
 
-
-``` docker logs docker-flask-image-recognition-sklearn ```
-
-
-``` docker rm -f docker logs docker-flask-image-recognition-sklearnn ```
-
-
-Push to docker hub account name/repository. This may take a few minutes
-```
-docker push davevoyles/docker-flask-image-recognition-sklearn
+```bash
+docker build -t davevoyles/docker-flask-image-recognition-sklearn:latest .
 ```
 
-### Login to Azure via CLI
-```
-az login 
+**Run the container**
+
+```bash
+docker run -d \
+  --name flask-classifier \
+  -p 5000:5000 \
+  davevoyles/docker-flask-image-recognition-sklearn:latest
 ```
 
-### Create resource group (one time)
+**Verify the container is running**
+
+```bash
+docker ps
+docker logs flask-classifier
 ```
+
+**Check the health endpoint**
+
+```bash
+curl http://localhost:5000/health
+# {"status": "ok"}
+```
+
+**Remove the container**
+
+```bash
+docker rm -f flask-classifier
+```
+
+---
+
+## Push to Docker Hub
+
+```bash
+docker push davevoyles/docker-flask-image-recognition-sklearn:latest
+```
+
+---
+
+## Deploy to Azure Container Instances
+
+**Login**
+
+```bash
+az login
+```
+
+**Create a resource group (one time)**
+
+```bash
 az group create -l eastus -n dv-containers-rg
 ```
 
-### Create a container in Azure
-Create a container in azure w/ a public IP so that we can make HTTP post requests and expose port 5000.
-Pull image from dockerhub *account/repository/tag*
-```
-az container create --resource-group dv-containers-rg --name dv-flask-container --image davevoyles/docker-flask-image-recognition-sklearn:latest --ip-address public --location eastus --ports 5000
+**Create the container**
+
+```bash
+az container create \
+  --resource-group dv-containers-rg \
+  --name dv-flask-container \
+  --image davevoyles/docker-flask-image-recognition-sklearn:latest \
+  --ip-address public \
+  --location eastus \
+  --ports 5000
 ```
 
-Check status of container by querying the ip address. You may have to wait a few minutes for it to complete.
-```
-az container show --resource-group dv-containers-rg --name dv-flask-container --query ipAddress
+**Get the public IP**
+
+```bash
+az container show \
+  --resource-group dv-containers-rg \
+  --name dv-flask-container \
+  --query ipAddress
 ```
 
-It should return with something like this:
+Sample output:
 
 ```json
 {
-  "additionalProperties": {},
-  "dnsNameLabel": null,
-  "fqdn": null,
   "ip": "40.114.107.193",
-  "ports": [
-    {
-      "additionalProperties": {},
-      "port": 5000,
-      "protocol": "TCP"
-    }
-  ]
+  "ports": [{"port": 5000, "protocol": "TCP"}]
 }
 ```
 
-### View the logs for your container      
+**Stream logs**
 
-``` 
+```bash
 az container logs --resource-group dv-containers-rg --name dv-flask-container
 ```
 
+**Delete the container**
 
-You can also log into the Azure portal in your browser to see if your container service is running.
+```bash
+az container delete --resource-group dv-containers-rg --name dv-flask-container
+```
+
+You can also monitor the container from the [Azure Portal](https://portal.azure.com).
 
 ![Azure Portal 1](/Images/az-portal-1.png)
 
 ![Azure Portal 2](/Images/az-portal-2.png)
 
+---
 
+## API reference
 
-## Example requests
-Swap the IP address listed below with your own. These will return the label of the image you passed in. For example:
+### `GET /health`
 
-```json 
+Liveness probe.  Returns `200 OK` when the service is ready.
+
+```bash
+curl http://<YOUR_IP>:5000/health
+```
+
+```json
+{"status": "ok"}
+```
+
+---
+
+### `POST /classify`
+
+Classify an image by URL.
+
+**Request body**
+
+```json
+{"url": "https://example.com/path/to/image.jpg"}
+```
+
+**Response**
+
+```json
 {"classification": "insulated_jackets"}
 ```
 
-```json
-curl -X POST \
-  http://40.117.156.248:5000/classify \
-  -H 'Cache-Control: no-cache' \
+**Example – insulated jacket**
+
+```bash
+curl -X POST http://<YOUR_IP>:5000/classify \
   -H 'Content-Type: application/json' \
-  -d '{
-"url":"https://images.thenorthface.com/is/image/TheNorthFace/NF0A2VD5_KX7_hero?$638x745$"
-}'
+  -d '{"url": "https://images.thenorthface.com/is/image/TheNorthFace/NF0A2VD5_KX7_hero?$638x745$"}'
 ```
 
-```json
-curl -X POST \
-  http://40.121.22.230:5000/classify \
-  -H 'Cache-Control: no-cache' \
+**Example – helmet**
+
+```bash
+curl -X POST http://<YOUR_IP>:5000/classify \
   -H 'Content-Type: application/json' \
-  -d '{
-"url":"https://images.thenorthface.com/is/image/TheNorthFace/NF0A2VD5_KX7_hero?$638x745$"
-}'
+  -d '{"url": "https://m.fortnine.ca/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/catalogimages/gmax/gm45-half-helmet-matte-black-xs.jpg"}'
 ```
 
-```json
-curl -X POST \
-  http://40.121.22.230:5000/classify \
-  -H 'Cache-Control: no-cache' \
-  -H 'Content-Type: application/json' \
-  -d '{
-"url":"https://m.fortnine.ca/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/catalogimages/gmax/gm45-half-helmet-matte-black-xs.jpg"
-}'
-```
+**Error responses**
 
-```json
-curl -X POST \
-  http://40.121.22.230:5000/classify \
-  -H 'Cache-Control: no-cache' \
-  -H 'Content-Type: application/json' \
-  -d '{
-"url":"https://images.sportsdirect.com/images/products/90800440_l.jpg"
-}'
-```
+| Status | Meaning |
+|---|---|
+| `400` | Missing or malformed JSON body |
+| `422` | Image URL could not be fetched or decoded |
+| `500` | Unexpected server error |
 
-```json
-curl -X POST \
-  http://40.121.22.230:5000/classify \
-  -H 'Cache-Control: no-cache' \
-  -H 'Content-Type: application/json' \
-  -d '{
-"url":"https://mec.imgix.net/medias/sys_master/high-res/high-res/8860680618014/5052314-SIL00.jpg?w=600&h=600&auto=format&q=60&fit=fill&bg=FFF"
-}'
-```
-
-
-### Delete the container
-
-```
-az container delete --name dv-flask-container --resource-group dv-containers-rgt
-```

@@ -1,15 +1,18 @@
-from flask             import Flask, render_template, jsonify, request, Response
-from PIL               import Image, ImageOps 
-from io                import BytesIO
-from sklearn.externals import joblib
-import pickle
-import json
-import pickle
+import logging
+import os
+
+import joblib
 import numpy as np
 import requests
+from flask import Flask, jsonify, request
+from io import BytesIO
+from PIL import Image
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 # These are the possible categories (classes) which can be detected
-namemap = [
+NAMEMAP = [
     'axes',
     'boots',
     'carabiners',
@@ -21,97 +24,112 @@ namemap = [
     'insulated_jackets',
     'pulleys',
     'rope',
-    'tents'
+    'tents',
 ]
+
 app = Flask(__name__)
+
+# Load the model once at startup rather than on every request
+MODEL_PATH = os.environ.get('MODEL_PATH', 'pickle_model.pkl')
+model = joblib.load(MODEL_PATH)
+logger.info("Model loaded from %s", MODEL_PATH)
 
 
 def resize(image):
-    """ Resize any image to 128 x 128, which is what the model has been trained on """
-    
+    """Resize an image so its longest side is 128 px, then centre-pad to 128x128."""
     base = 128
     width, height = image.size
+    resample = Image.Resampling.LANCZOS
 
     if width > height:
-        wpercent = base/float(width)
-        hsize    = int((float(height) * float(wpercent)))
-        image    = image.resize((base,hsize), Image.ANTIALIAS)
+        wpercent = base / float(width)
+        hsize = int(float(height) * wpercent)
+        image = image.resize((base, hsize), resample)
     else:
-        hpercent = base/float(height)
-        wsize    = int((float(width) * float(hpercent)))
-        image    = image.resize((wsize, base), Image.ANTIALIAS)
+        hpercent = base / float(height)
+        wsize = int(float(width) * hpercent)
+        image = image.resize((wsize, base), resample)
 
-    newImage = Image.new('RGB',
-                     (base, base),     # A4 at 72dpi
-                     (255, 255, 255))  # White
-
-    position = (int( (base/2 - image.width/2) ), 0)
-    newImage.paste(image, position)
-
-    return newImage
+    canvas = Image.new('RGB', (base, base), (255, 255, 255))
+    position = (int(base / 2 - image.width / 2), 0)
+    canvas.paste(image, position)
+    return canvas
 
 
 def normalize(arr):
-    """ This means that the largest value for each attribute is 1 and the smallest value is 0.
-        Normalization is a good technique to use when you do not know the distribution of your data 
-        or when you know the distribution is not Gaussian (a bell curve)."""
-    
-    arr = arr.astype('float')
-    
-    # Do not touch the alpha channel
-    for i in range(3):
-        minval = arr[...,i].min()
-        maxval = arr[...,i].max()
-        if minval != maxval:
-            arr[...,i] -= minval
-            arr[...,i] *= (255.0/(maxval-minval))
+    """Min-max normalise each RGB channel independently to the 0-255 range.
 
+    Normalization is useful when the distribution of the data is unknown or
+    non-Gaussian: it scales each channel so the minimum becomes 0 and the
+    maximum becomes 255.
+    """
+    arr = arr.astype('float')
+    for i in range(3):
+        minval = arr[..., i].min()
+        maxval = arr[..., i].max()
+        if minval != maxval:
+            arr[..., i] -= minval
+            arr[..., i] *= 255.0 / (maxval - minval)
     return arr
 
 
-def processImage(image):
-    """ Resize and normalize the image """
+def process_image(image):
+    """Resize and normalise an image for model inference."""
+    image = resize(image)
+    arr = np.array(image)
+    processed = Image.fromarray(normalize(arr).astype('uint8'), 'RGB')
+    return processed
 
-    image   = resize(image)
-    arr     = np.array(image)
-    new_img = Image.fromarray(normalize(arr).astype('uint8'),'RGB')
-    
-    return new_img
+
+@app.route('/health', methods=['GET'])
+def health():
+    """Liveness probe — returns 200 when the service is ready."""
+    return jsonify({"status": "ok"})
 
 
 @app.route('/classify', methods=['POST'])
 def classify():
-    """ Make a POST to this endpint and pass in an URL to an image in the body of the request.
-        Swap out the model.pkl with another trained model to classify new objects. """
-    
+    """Classify an image by URL.
+
+    POST a JSON body with a ``url`` key pointing to an image.  The endpoint
+    returns the predicted category label.  Example::
+
+        {"url": "https://example.com/image.jpg"}
+
+    Swap out *pickle_model.pkl* with any compatible scikit-learn model to
+    classify different objects.
+    """
+    body = request.get_json(silent=True)
+    if not body or 'url' not in body:
+        return jsonify({"error": "Request body must be JSON with a 'url' field."}), 400
+
+    img_url = body['url']
+    logger.info("Classifying image: %s", img_url)
+
     try:
-        body    = request.get_json()
-        print(body)
-        img_url = body["url"]
+        response = requests.get(img_url, timeout=10)
+        response.raise_for_status()
+        img = Image.open(BytesIO(response.content)).convert('RGB')
+    except requests.RequestException as exc:
+        logger.warning("Failed to fetch image %s: %s", img_url, exc)
+        return jsonify({"error": f"Could not retrieve image: {exc}"}), 422
+    except Exception as exc:
+        logger.warning("Could not open image from %s: %s", img_url, exc)
+        return jsonify({"error": f"Could not open image: {exc}"}), 422
 
-        # Get the image and show it
-        response = requests.get(img_url)
-        img      = Image.open(BytesIO(response.content))
-        prcedImg = processImage(img)
+    processed_img = process_image(img)
 
-        # Convert a 2D image into a flat array
-        imgFeatures = np.array(prcedImg).ravel().reshape(1,-1)
-        print(imgFeatures)
+    # Flatten the 128x128x3 image into a 1-D feature vector
+    img_features = np.array(processed_img).ravel().reshape(1, -1)
+    prediction = model.predict(img_features)
+    label = NAMEMAP[int(prediction[0])]
+    logger.info("Prediction: %s", label)
 
-        model   = joblib.load('pickle_model.pkl')
-        predict = model.predict(imgFeatures)
-        print('The image is a ', namemap[int(predict[0])]),
-        
-        print('image: ', namemap[int(predict[0])], predict)
+    # Convert the integer index into a human-readable label.
+    # e.g. 0 → 'axes', 1 → 'boots', 2 → 'carabiners'
+    return jsonify({"classification": label})
 
-        # Convert the integer returned from the model into the name of the class from our namemap above.
-        # EX: 0 = axes, 1 = boots, 2 = carabiners
-        response = json.dumps({"classification": namemap[int(predict[0])]})
-        return(response)
-        
-    except Exception as e:
-        print(e)
-        raise 
 
 if __name__ == '__main__':
-    app.run(debug=True,host='0.0.0.0')
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(debug=debug, host='0.0.0.0')
