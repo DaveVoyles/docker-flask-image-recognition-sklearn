@@ -2,7 +2,7 @@ Flask==3.1.1
 gunicorn==23.0.0
 joblib==1.4.2
 numpy==2.2.6
-Pillow==11.2.1
+Pillow==13.0.0
 scikit-learn==1.6.1
 scipy==1.15.3
 requests==2.32.3
